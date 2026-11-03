@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>India Macro Dashboard</title>
+<style>
+:root{--bg:#0b1220;--card:#131c2e;--line:#22304a;--tx:#e8eefc;--mut:#8a9bbd;--up:#2ecc8f;--dn:#ff6b6b;--ac:#ff9933;--gr:#138808}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,Segoe UI,Roboto,sans-serif}
+header{padding:18px 22px;border-bottom:3px solid;border-image:linear-gradient(90deg,var(--ac),#fff,var(--gr)) 1;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{margin:0;font-size:22px}.sub{color:var(--mut);font-size:13px}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--up)}
+.live i{width:9px;height:9px;border-radius:50%;background:var(--up);animation:p 1.4s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 #2ecc8f99}100%{box-shadow:0 0 0 10px #0000}}
+.bar{display:flex;flex-wrap:wrap;gap:8px;padding:14px 22px}
+.bar button,.bar input,.btn{background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:20px;padding:7px 14px;cursor:pointer;font:inherit}
+.bar button.on{background:var(--ac);color:#111;border-color:var(--ac)}
+.bar input{cursor:text;min-width:180px}
+main{padding:0 22px 40px}
+h2{font-size:15px;color:var(--ac);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;cursor:pointer;transition:.2s;animation:in .5s both}
+.card:hover{transform:translateY(-3px);border-color:var(--ac)}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+.nm{color:var(--mut);font-size:12.5px}.val{font-size:26px;font-weight:700;margin:4px 0}.val small{font-size:12px;color:var(--mut);font-weight:400}
+.dl{font-size:12.5px}.up{color:var(--up)}.dn{color:var(--dn)}.fl{color:var(--mut)}
+svg.sp{width:100%;height:34px;margin-top:6px}
+dialog{background:var(--card);color:var(--tx);border:1px solid var(--line);border-radius:14px;max-width:680px;width:92%}
+dialog::backdrop{background:#000a}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:5px;border-bottom:1px solid var(--line);text-align:left}
+td input{width:90px;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:4px}
+.note{color:var(--mut);font-size:12px;margin-top:20px}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>🇮🇳 India Macroeconomic Dashboard</h1>
+  <div class="sub">Last data update: <b id="upd"></b> · Clock: <span id="clk"></span></div></div>
+  <div><span class="live"><i></i>LIVE</span> <button class="btn" id="edit">✏️ Update data</button></div>
+</header>
+<div class="bar" id="tabs"></div>
+<main id="main"></main>
+
+<dialog id="dlg"><div id="dbody"></div><p style="text-align:right"><button class="btn" onclick="dlg.close()">Close</button></p></dialog>
+
+<dialog id="ed"><h3 style="margin-top:0">Daily update</h3>
+<div style="max-height:55vh;overflow:auto"><table id="et"></table></div>
+<p><label>Date: <input type="date" id="edate"></label>
+<button class="btn" id="save">Save update</button>
+<button class="btn" id="exp">Export JSON</button>
+<button class="btn" id="imp">Import JSON</button>
+<button class="btn" id="rst">Reset</button>
+<button class="btn" onclick="ed.close()">Close</button></p></dialog>
+
+<script>
+/* ============ EDIT YOUR DATA HERE (or use the in-page "Update data" button) ============
+   k: id | n: name | c: category | u: unit | h: history (oldest → newest values)
+   d: decimals | good: "up" if a rise is good news, "dn" if a fall is good, "" for neutral
+   ⚠ Sample values below are approximate placeholders — replace with latest official figures
+   (RBI, MoSPI, NSO/PLFS, MoF Budget, IMF, UNDP, NITI Aayog, World Bank). */
+const UPDATED="2026-11-03";
+const D=[
+// Monetary policy
+{k:"repo",n:"Repo Rate",c:"Monetary Policy",u:"%",d:2,good:"",h:[6.5,6.25,6.0,5.5,5.5,5.25]},
+{k:"rrepo",n:"Reverse Repo Rate",c:"Monetary Policy",u:"%",d:2,good:"",h:[3.35,3.35,3.35,3.35,3.35,3.35]},
+{k:"crr",n:"CRR",c:"Monetary Policy",u:"%",d:2,good:"",h:[4.0,4.0,4.0,3.75,3.0,3.0]},
+{k:"slr",n:"SLR",c:"Monetary Policy",u:"%",d:1,good:"",h:[18,18,18,18,18,18]},
+// Output
+{k:"gdp",n:"GDP (Nominal)",c:"Output & Income",u:"$ tn",d:2,good:"up",h:[3.55,3.73,3.9,4.1,4.19,4.3]},
+{k:"gr",n:"GDP Growth Rate",c:"Output & Income",u:"%",d:1,good:"up",h:[8.2,6.5,6.7,7.8,7.4,7.5]},
+{k:"pc",n:"GDP Per Capita",c:"Output & Income",u:"$",d:0,good:"up",h:[2450,2500,2600,2650,2700,2750]},
+{k:"ppp",n:"GDP (PPP)",c:"Output & Income",u:"$ tn",d:1,good:"up",h:[14.6,15.5,16.4,17.2,17.6,18.2]},
+// Prices
+{k:"cpi",n:"CPI Inflation",c:"Prices",u:"%",d:2,good:"dn",h:[5.5,4.3,3.3,2.1,1.5,0.3]},
+{k:"wpi",n:"WPI Inflation",c:"Prices",u:"%",d:2,good:"dn",h:[2.5,1.3,0.9,0.1,-0.3,-1.2]},
+{k:"cpiidx",n:"CPI Index (Combined)",c:"Prices",u:"pts",d:1,good:"",h:[190,192,193.5,194,195,196]},
+// Labour
+{k:"lit",n:"Literacy Rate",c:"Labour & Social",u:"%",d:1,good:"up",h:[77.7,77.7,80.9,80.9,80.9,80.9]},
+{k:"lfpr",n:"LFPR (15+)",c:"Labour & Social",u:"%",d:1,good:"up",h:[54.9,55.2,55.6,55.8,56.0,56.1]},
+{k:"wpr",n:"WPR (15+)",c:"Labour & Social",u:"%",d:1,good:"up",h:[52.0,52.4,52.8,53.0,53.1,53.3]},
+{k:"ur",n:"Unemployment Rate",c:"Labour & Social",u:"%",d:1,good:"dn",h:[3.2,3.2,3.2,5.1,5.2,5.2]},
+{k:"sex",n:"Sex Ratio (F per 1000 M)",c:"Labour & Social",u:"",d:0,good:"up",h:[943,943,1020,1020,1020,1020]},
+{k:"hdi",n:"HDI Rank",c:"Labour & Social",u:"rank",d:0,good:"dn",h:[134,134,133,130,130,130]},
+{k:"mpi",n:"Multidimensional Poverty Index",c:"Labour & Social",u:"%",d:2,good:"dn",h:[24.85,24.85,14.96,11.28,11.28,11.28]},
+{k:"gini",n:"Gini Coefficient",c:"Labour & Social",u:"index",d:1,good:"dn",h:[28.8,28.8,25.5,25.5,25.5,25.5]},
+// External
+{k:"fx",n:"INR / USD",c:"External Sector",u:"₹",d:2,good:"dn",h:[83.0,84.5,85.6,86.5,88.5,89.4]},
+{k:"usd",n:"Rupee Value (1 ₹ in US¢)",c:"External Sector",u:"¢",d:2,good:"up",h:[1.20,1.18,1.17,1.156,1.13,1.118]},
+{k:"bop",n:"BoP – Current Account",c:"External Sector",u:"% GDP",d:1,good:"up",h:[-0.7,-1.2,-1.1,-0.6,-1.3,-0.9]},
+{k:"neer",n:"NEER (40-currency)",c:"External Sector",u:"index",d:2,good:"",h:[104,102.5,100.8,99.5,98.0,96.5]},
+{k:"reer",n:"REER (40-currency)",c:"External Sector",u:"index",d:2,good:"",h:[108,106.5,104.2,102.0,99.0,97.5]},
+{k:"imf",n:"IMF GDP Rank (Nominal)",c:"External Sector",u:"rank",d:0,good:"dn",h:[5,5,5,5,4,4]},
+// Fiscal
+{k:"fd",n:"Fiscal Deficit",c:"Fiscal",u:"% GDP",d:1,good:"dn",h:[6.4,5.5,5.6,4.8,4.4,4.4]},
+{k:"rd",n:"Revenue Deficit",c:"Fiscal",u:"% GDP",d:1,good:"dn",h:[4.4,3.2,2.6,1.8,1.5,1.5]},
+{k:"erd",n:"Effective Revenue Deficit",c:"Fiscal",u:"% GDP",d:1,good:"dn",h:[3.2,2.0,1.5,0.9,0.8,0.7]},
+{k:"pd",n:"Primary Deficit",c:"Fiscal",u:"% GDP",d:1,good:"dn",h:[3.0,2.3,1.9,1.1,0.8,0.8]},
+{k:"tax",n:"Tax-to-GDP Ratio",c:"Fiscal",u:"%",d:1,good:"up",h:[11.2,11.5,11.7,11.8,11.9,12.0]},
+{k:"debt",n:"Debt-to-GDP (General Govt)",c:"Fiscal",u:"%",d:1,good:"dn",h:[88.5,84.0,83.0,82.0,81.5,81.0]},
+];
+/* ====================================================================== */
+
+const LS="indiaMacroV1";
+let st=JSON.parse(localStorage.getItem(LS)||"null");
+const base=()=>({upd:UPDATED,h:Object.fromEntries(D.map(x=>[x.k,[...x.h]]))});
+if(!st)st=base();
+const $=id=>document.getElementById(id);
+let cat="All",q="";
+const cats=["All",...new Set(D.map(x=>x.c))];
+
+function spark(a,col){
+  const mn=Math.min(...a),mx=Math.max(...a),r=mx-mn||1;
+  const p=a.map((v,i)=>[i/(a.length-1||1)*100,32-((v-mn)/r)*28]);
+  return `<svg class="sp" viewBox="0 0 100 34" preserveAspectRatio="none"><polyline fill="none" stroke="${col}" stroke-width="1.8" points="${p.map(z=>z.join(",")).join(" ")}"/><circle cx="${p.at(-1)[0]}" cy="${p.at(-1)[1]}" r="2.4" fill="${col}"/></svg>`;
+}
+function fmt(v,d){return Number(v).toLocaleString("en-IN",{minimumFractionDigits:d,maximumFractionDigits:d})}
+function info(x){
+  const a=st.h[x.k],v=a.at(-1),pv=a.length>1?a.at(-2):v,df=v-pv;
+  const dir=df>0?"up":df<0?"dn":"fl";
+  let cl="fl";if(df!==0&&x.good)cl=(dir===x.good)?"up":"dn";
+  return{a,v,df,cl,arrow:df>0?"▲":df<0?"▼":"●"};
+}
+function render(){
+  $("upd").textContent=st.upd;
+  $("tabs").innerHTML=cats.map(c=>`<button class="${c===cat?"on":""}" onclick="cat='${c}';render()">${c}</button>`).join("")+
+    `<input id="s" placeholder="Search indicator…" value="${q}" oninput="q=this.value;render();$('s').focus()">`;
+  let h="";
+  for(const c of cats.slice(1)){
+    if(cat!=="All"&&cat!==c)continue;
+    const items=D.filter(x=>x.c===c&&x.n.toLowerCase().includes(q.toLowerCase()));
+    if(!items.length)continue;
+    h+=`<h2>${c}</h2><div class="grid">`+items.map((x,i)=>{
+      const f=info(x),col=f.cl==="up"?"#2ecc8f":f.cl==="dn"?"#ff6b6b":"#8a9bbd";
+      return `<div class="card" style="animation-delay:${i*50}ms" onclick="detail('${x.k}')">
+        <div class="nm">${x.n}</div>
+        <div class="val" data-v="${f.v}" data-d="${x.d}">${fmt(f.v,x.d)} <small>${x.u}</small></div>
+        <div class="dl ${f.cl}">${f.arrow} ${fmt(Math.abs(f.df),x.d)} vs previous</div>${spark(f.a,col)}</div>`}).join("")+`</div>`;
+  }
+  $("main").innerHTML=h+`<p class="note">Figures are manually updated and sourced from RBI, MoSPI, PLFS, Union Budget, IMF, UNDP, NITI Aayog and World Bank. Verify against official releases before citing. Click any card for its trend.</p>`;
+  countUp();
+}
+function countUp(){
+  document.querySelectorAll(".val").forEach(el=>{
+    const to=+el.dataset.v,d=+el.dataset.d,sm=el.querySelector("small").outerHTML;let t0=null;
+    const step=t=>{t0??=t;const p=Math.min((t-t0)/700,1);el.innerHTML=fmt(to*p,d)+" "+sm;if(p<1)requestAnimationFrame(step)};
+    requestAnimationFrame(step);
+  });
+}
+function detail(k){
+  const x=D.find(z=>z.k===k),a=st.h[k],W=600,H=220,P=30;
+  const mn=Math.min(...a),mx=Math.max(...a),r=mx-mn||1;
+  const pts=a.map((v,i)=>[P+i/(a.length-1||1)*(W-2*P),H-P-((v-mn)/r)*(H-2*P),v]);
+  $("dbody").innerHTML=`<h3 style="margin-top:0">${x.n} <small style="color:var(--mut)">(${x.u})</small></h3>
+  <svg viewBox="0 0 ${W} ${H}" style="width:100%"><polyline fill="none" stroke="#ff9933" stroke-width="2.5" points="${pts.map(p=>p[0]+","+p[1]).join(" ")}"/>
+  ${pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="4" fill="#ff9933"/><text x="${p[0]}" y="${p[1]-9}" fill="#e8eefc" font-size="11" text-anchor="middle">${fmt(p[2],x.d)}</text>`).join("")}</svg>
+  <div class="sub">Last ${a.length} updates · Latest: ${fmt(a.at(-1),x.d)} ${x.u}</div>`;
+  dlg.showModal();
+}
+/* Update panel */
+$("edit").onclick=()=>{
+  $("edate").value=new Date().toISOString().slice(0,10);
+  $("et").innerHTML="<tr><th>Indicator</th><th>Latest</th><th>New value</th></tr>"+D.map(x=>
+   `<tr><td>${x.n}</td><td>${fmt(st.h[x.k].at(-1),x.d)}</td><td><input type="number" step="any" data-k="${x.k}" placeholder="—"></td></tr>`).join("");
+  ed.showModal();
+};
+$("save").onclick=()=>{
+  document.querySelectorAll("#et input").forEach(i=>{
+    if(i.value!==""){const a=st.h[i.dataset.k];a.push(+i.value);if(a.length>12)a.shift()}});
+  st.upd=$("edate").value;localStorage.setItem(LS,JSON.stringify(st));ed.close();render();
+};
+$("exp").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([JSON.stringify(st,null,1)],{type:"application/json"}));a.download="india-macro-data.json";a.click()};
+$("imp").onclick=()=>{const f=document.createElement("input");f.type="file";f.accept=".json";f.onchange=async()=>{st=JSON.parse(await f.files[0].text());localStorage.setItem(LS,JSON.stringify(st));ed.close();render()};f.click()};
+$("rst").onclick=()=>{if(confirm("Reset to the values in the code?")){localStorage.removeItem(LS);st=base();ed.close();render()}};
+setInterval(()=>$("clk").textContent=new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",dateStyle:"medium",timeStyle:"medium"})+" IST",1000);
+const dlg=$("dlg"),ed=$("ed");
+render();
+</script>
+</body>
+</html>
